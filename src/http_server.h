@@ -7,7 +7,7 @@
 #include <boost/beast/http.hpp>
 
 #include <memory>
-#include <iostream>
+#include <string_view>
 
 namespace http_server {
 
@@ -18,10 +18,10 @@ namespace http_server {
     namespace sys = boost::system;
 
     //////////////////////////////////////////////////
+    // ERROR
+    //////////////////////////////////////////////////
 
-    inline void ReportError(sys::error_code ec, std::string_view what) {
-        std::cerr << what << ": " << ec.message() << std::endl;
-    }
+    void ReportError(sys::error_code ec, std::string_view what);
 
     //////////////////////////////////////////////////
     // SESSION BASE
@@ -32,16 +32,14 @@ namespace http_server {
         SessionBase(const SessionBase&) = delete;
         SessionBase& operator=(const SessionBase&) = delete;
 
+        // ? ќЅя«ј“≈Ћ№Ќќ должно быть, иначе cpp не слинкуетс€
         void Run();
 
     protected:
         using HttpRequest = http::request<http::string_body>;
 
-        explicit SessionBase(tcp::socket&& socket)
-            : stream_(std::move(socket)) {
-        }
-
-        ~SessionBase() = default;
+        explicit SessionBase(tcp::socket&& socket);
+        virtual ~SessionBase() = default;
 
         template <typename Body, typename Fields>
         void Write(http::response<Body, Fields>&& response) {
@@ -60,23 +58,19 @@ namespace http_server {
         void Read();
         void OnRead(beast::error_code ec, std::size_t bytes);
         void OnWrite(bool close, beast::error_code ec, std::size_t bytes);
-
-        void Close() {
-            beast::error_code ec;
-            stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
-        }
+        void Close();
 
         virtual void HandleRequest(HttpRequest&& request) = 0;
         virtual std::shared_ptr<SessionBase> GetSharedThis() = 0;
 
-    private:
+    protected:
         beast::tcp_stream stream_;
         beast::flat_buffer buffer_;
         HttpRequest request_;
     };
 
     //////////////////////////////////////////////////
-    // SESSION
+    // SESSION (template Ч только header)
     //////////////////////////////////////////////////
 
     template <typename RequestHandler>
@@ -90,9 +84,9 @@ namespace http_server {
         }
 
     private:
-        std::shared_ptr<SessionBase> GetSharedThis() override {
-            return this->shared_from_this();
-        }
+         std::shared_ptr<SessionBase> GetSharedThis() override {
+             return this->shared_from_this();
+         }
 
         void HandleRequest(HttpRequest&& request) override {
             request_handler_(
@@ -107,7 +101,7 @@ namespace http_server {
     };
 
     //////////////////////////////////////////////////
-    // LISTENER
+    // LISTENER (template Ч ¬—® inline)
     //////////////////////////////////////////////////
 
     template <typename RequestHandler>
@@ -140,7 +134,8 @@ namespace http_server {
 
         void OnAccept(sys::error_code ec, tcp::socket socket) {
             if (ec) {
-                return ReportError(ec, "accept");
+                ReportError(ec, "accept");
+                return;
             }
 
             AsyncRunSession(std::move(socket));
@@ -164,7 +159,9 @@ namespace http_server {
     //////////////////////////////////////////////////
 
     template <typename RequestHandler>
-    void ServeHttp(net::io_context& ioc, const tcp::endpoint& endpoint, RequestHandler&& handler) {
+    void ServeHttp(net::io_context& ioc,
+        const tcp::endpoint& endpoint,
+        RequestHandler&& handler) {
         using MyListener = Listener<std::decay_t<RequestHandler>>;
 
         std::make_shared<MyListener>(
@@ -173,4 +170,4 @@ namespace http_server {
             std::forward<RequestHandler>(handler))->Run();
     }
 
-}  // namespace http_server
+} // namespace http_server

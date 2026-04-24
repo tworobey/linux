@@ -1,6 +1,24 @@
 #include "http_server.h"
 
+#include <iostream>
+
 namespace http_server {
+
+    //////////////////////////////////////////////////
+    // ERROR
+    //////////////////////////////////////////////////
+
+    void ReportError(sys::error_code ec, std::string_view what) {
+        std::cerr << what << ": " << ec.message() << std::endl;
+    }
+
+    //////////////////////////////////////////////////
+    // SESSION BASE
+    //////////////////////////////////////////////////
+
+    SessionBase::SessionBase(tcp::socket&& socket)
+        : stream_(std::move(socket)) {
+    }
 
     void SessionBase::Run() {
         net::dispatch(
@@ -33,17 +51,24 @@ namespace http_server {
         }
 
         if (ec) {
-            return ReportError(ec, "read"sv);
+            ReportError(ec, "read");
+            return;
         }
 
-        HandleRequest(std::move(request_));
+        try {
+            HandleRequest(std::move(request_));
+        }
+        catch (const std::exception& e) {
+            std::cerr << "HANDLER EXCEPTION: " << e.what() << std::endl;
+        }
     }
 
     void SessionBase::OnWrite(bool close, beast::error_code ec, std::size_t) {
         using namespace std::literals;
 
         if (ec) {
-            return ReportError(ec, "write"sv);
+            ReportError(ec, "write");
+            return;
         }
 
         if (close) {
@@ -51,6 +76,15 @@ namespace http_server {
         }
 
         Read();
+    }
+
+    void SessionBase::Close() {
+        beast::error_code ec;
+        stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
+
+        if (ec) {
+            ReportError(ec, "shutdown");
+        }
     }
 
 }  // namespace http_server
