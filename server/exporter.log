@@ -1,0 +1,7 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/home/tworobey/linux/server/web_exporter.py", line 38, in <module>
+    my_main()
+  File "/home/tworobey/linux/server/web_exporter.py", line 18, in my_main
+    for line in sys.stdin:
+OSError: [Errno 9] Bad file descriptor
