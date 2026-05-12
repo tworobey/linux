@@ -175,11 +175,13 @@ private:
 };
 
 struct DogPosition {
-    double x = 0.0, y = 0.0;
+    double x = 0.0;
+    double y = 0.0;
 };
 
 struct DogSpeed {
-    double vx = 0.0, vy = 0.0;
+    double vx = 0.0;
+    double vy = 0.0;
 };
 
 enum class DogDirection { NORTH, SOUTH, WEST, EAST };
@@ -297,7 +299,7 @@ public:
 
     std::vector<const Player*> GetPlayersOnMap(const std::string& mapId) const {
         std::vector<const Player*> result;
-        for (auto& p : players_)
+        for (const auto& p : players_)
             if (p.GetMapId() == mapId)
                 result.push_back(&p);
         return result;

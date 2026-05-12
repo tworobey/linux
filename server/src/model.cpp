@@ -48,7 +48,8 @@ static std::string GenerateToken() {
 static DogPosition StartPositionOnMap(const Map& map) {
     const auto& roads = map.GetRoads();
     if (roads.empty()) return {0.0, 0.0};
-    return { (double)roads[0].GetStart().x, (double)roads[0].GetStart().y };
+    return { static_cast<double>(roads[0].GetStart().x),
+             static_cast<double>(roads[0].GetStart().y) };
 }
 
 static DogPosition RandomPositionOnMap(const Map& map) {

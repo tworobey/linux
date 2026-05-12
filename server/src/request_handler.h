@@ -66,6 +66,49 @@ std::string GetMimeType(const fs::path& path) {
     return "application/octet-stream";
 }
 
+json::array SerializeRoads(const model::Map& map) {
+    json::array roads;
+    for (const auto& r : map.GetRoads()) {
+        json::object road;
+        road["x0"] = r.GetStart().x;
+        road["y0"] = r.GetStart().y;
+        if (r.IsHorizontal())
+            road["x1"] = r.GetEnd().x;
+        else
+            road["y1"] = r.GetEnd().y;
+        roads.push_back(road);
+    }
+    return roads;
+}
+
+json::array SerializeBuildings(const model::Map& map) {
+    json::array buildings;
+    for (const auto& b : map.GetBuildings()) {
+        const auto& rect = b.GetBounds();
+        buildings.push_back({
+            {"x", rect.position.x},
+            {"y", rect.position.y},
+            {"w", rect.size.width},
+            {"h", rect.size.height}
+        });
+    }
+    return buildings;
+}
+
+json::array SerializeOffices(const model::Map& map) {
+    json::array offices;
+    for (const auto& o : map.GetOffices()) {
+        offices.push_back({
+            {"id",      *o.GetId()},
+            {"x",       o.GetPosition().x},
+            {"y",       o.GetPosition().y},
+            {"offsetX", o.GetOffset().dx},
+            {"offsetY", o.GetOffset().dy}
+        });
+    }
+    return offices;
+}
+
 json::array SerializeMaps(const model::Game& game) {
     json::array arr;
     for (const auto& map : game.GetMaps()) {
@@ -79,46 +122,11 @@ json::array SerializeMaps(const model::Game& game) {
 
 json::object SerializeMap(const model::Map& map) {
     json::object obj;
-    obj["id"]   = *map.GetId();
-    obj["name"] = map.GetName();
-
-    json::array roads;
-    for (const auto& r : map.GetRoads()) {
-        json::object road;
-        road["x0"] = r.GetStart().x;
-        road["y0"] = r.GetStart().y;
-        if (r.IsHorizontal())
-            road["x1"] = r.GetEnd().x;
-        else
-            road["y1"] = r.GetEnd().y;
-        roads.push_back(road);
-    }
-    obj["roads"] = roads;
-
-    json::array buildings;
-    for (const auto& b : map.GetBuildings()) {
-        const auto& rect = b.GetBounds();
-        buildings.push_back({
-            {"x", rect.position.x},
-            {"y", rect.position.y},
-            {"w", rect.size.width},
-            {"h", rect.size.height}
-        });
-    }
-    obj["buildings"] = buildings;
-
-    json::array offices;
-    for (const auto& o : map.GetOffices()) {
-        offices.push_back({
-            {"id",      *o.GetId()},
-            {"x",       o.GetPosition().x},
-            {"y",       o.GetPosition().y},
-            {"offsetX", o.GetOffset().dx},
-            {"offsetY", o.GetOffset().dy}
-        });
-    }
-    obj["offices"] = offices;
-
+    obj["id"]        = *map.GetId();
+    obj["name"]      = map.GetName();
+    obj["roads"]     = SerializeRoads(map);
+    obj["buildings"] = SerializeBuildings(map);
+    obj["offices"]   = SerializeOffices(map);
     return obj;
 }
 
