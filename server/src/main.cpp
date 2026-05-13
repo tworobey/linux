@@ -28,9 +28,9 @@ std::string MyFormatter(const boost::log::record_view& rec,
                         boost::log::formatting_ostream& strm)
 {
     auto now = std::chrono::system_clock::now();
-    auto t = std::chrono::system_clock::to_time_t(now);
+    auto time_point = std::chrono::system_clock::to_time_t(now);
     char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::gmtime(&t));
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::gmtime(&time_point));
 
     json::object obj;
     obj["timestamp"] = buf;
@@ -163,6 +163,7 @@ int main(int argc, const char* argv[]) {
             );
         };
 
+        // Запускаем тикер если задан --tick-period
         if (args->tick_period) {
             auto ticker = std::make_shared<Ticker>(
                 api_strand,
@@ -186,3 +187,4 @@ int main(int argc, const char* argv[]) {
     }
     return EXIT_SUCCESS;
 }
+

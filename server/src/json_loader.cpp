@@ -101,7 +101,13 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
 
     std::string content((std::istreambuf_iterator<char>(file)),
         std::istreambuf_iterator<char>());
-    json::value doc = json::parse(content);
+
+    json::value doc;
+    try {
+        doc = json::parse(content);
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to parse config JSON: " + std::string(e.what()));
+    }
     const auto& obj = doc.as_object();
 
     model::Game game;
