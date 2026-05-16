@@ -2,6 +2,7 @@
 
 #include "http_server.h"
 #include "model.h"
+#include "extra_data.h"
 
 #include <boost/json.hpp>
 #include <string>
@@ -120,13 +121,21 @@ json::array SerializeMaps(const model::Game& game) {
     return arr;
 }
 
-json::object SerializeMap(const model::Map& map) {
+json::object SerializeMap(const model::Map& map,
+                          const extra_data::MapExtraData& extra_data) {
     json::object obj;
     obj["id"]        = *map.GetId();
     obj["name"]      = map.GetName();
     obj["roads"]     = SerializeRoads(map);
     obj["buildings"] = SerializeBuildings(map);
     obj["offices"]   = SerializeOffices(map);
+
+    const auto* loot_types = extra_data.GetLootTypes(*map.GetId());
+    if (loot_types)
+        obj["lootTypes"] = *loot_types;
+    else
+        obj["lootTypes"] = json::array{};
+
     return obj;
 }
 
@@ -162,8 +171,10 @@ inline std::optional<std::string> TryExtractToken(
 
 class RequestHandler {
 public:
-    RequestHandler(model::Game& game, fs::path static_root, bool tick_auto_mode = false)
+    RequestHandler(model::Game& game, extra_data::MapExtraData& extra_data,
+                   fs::path static_root, bool tick_auto_mode = false)
         : game_(game)
+        , extra_data_(extra_data)
         , static_root_(fs::weakly_canonical(std::move(static_root)))
         , tick_auto_mode_(tick_auto_mode) {
     }
@@ -516,11 +527,39 @@ if (target == endpoints::STATE) {
         entry["pos"]   = pos_arr;
         entry["speed"] = speed_arr;
         entry["dir"]   = dir;
+
+        // Рюкзак
+        json::array bag_arr;
+        for (const auto& item : dog->GetBag()) {
+            json::object bag_item;
+            bag_item["id"]   = item.id;
+            bag_item["type"] = item.type;
+            bag_arr.push_back(bag_item);
+        }
+        entry["bag"] = bag_arr;
+
+        // Очки
+        entry["score"] = dog->GetScore();
+
         players_obj[std::to_string(p->GetId())] = entry;
     }
 
     json::object result;
     result["players"] = players_obj;
+
+    // Добавляем lostObjects
+    const auto& lost = game_.GetLostObjects(player->GetMapId());
+    json::object lost_obj;
+    for (const auto& lo : lost) {
+        json::array pos_arr;
+        pos_arr.push_back(lo.pos.x);
+        pos_arr.push_back(lo.pos.y);
+        json::object entry;
+        entry["type"] = lo.type;
+        entry["pos"]  = pos_arr;
+        lost_obj[std::to_string(lo.id)] = entry;
+    }
+    result["lostObjects"] = lost_obj;
 
     http::response<http::string_body> res{http::status::ok, req.version()};
     res.set(http::field::content_type, "application/json");
@@ -554,7 +593,7 @@ if (target == endpoints::STATE) {
 
             http::response<http::string_body> res{http::status::ok, req.version()};
             res.set(http::field::content_type, "application/json");
-            res.body() = json::serialize(SerializeMap(*map));
+            res.body() = json::serialize(SerializeMap(*map, extra_data_));
             res.prepare_payload();
             return send(std::move(res));
         }
@@ -623,6 +662,7 @@ private:
     }
 
     model::Game& game_;
+    extra_data::MapExtraData& extra_data_;
     fs::path static_root_;
     bool tick_auto_mode_ = false;
 };

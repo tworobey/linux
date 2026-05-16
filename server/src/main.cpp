@@ -15,6 +15,7 @@
 #include "request_handler.h"
 #include "http_server.h"
 #include "ticker.h"
+#include "extra_data.h"
 
 using namespace std::literals;
 namespace net = boost::asio;
@@ -114,7 +115,9 @@ int main(int argc, const char* argv[]) {
 
         BOOST_LOG_TRIVIAL(info) << "server started";
 
-        model::Game game = json_loader::LoadGame(args->config_file);
+        auto result = json_loader::LoadGame(args->config_file);
+        model::Game& game = result.game;
+        extra_data::MapExtraData& extra_data = result.extra_data;
         game.SetRandomizeSpawn(args->randomize_spawn);
 
         fs::path static_root = args->www_root;
@@ -129,7 +132,7 @@ int main(int argc, const char* argv[]) {
 
         auto api_strand = net::make_strand(ioc);
 
-        http_handler::RequestHandler handler{game, static_root, tick_auto_mode};
+        http_handler::RequestHandler handler{game, extra_data, static_root, tick_auto_mode};
 
         auto logging_handler = [&](auto&& req, auto&& send) {
             auto start = std::chrono::steady_clock::now();

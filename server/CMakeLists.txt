@@ -20,6 +20,8 @@ add_executable(game_server
     src/boost_json.cpp
     src/json_loader.cpp
     src/request_handler.cpp
+    src/loot_generator.cpp
+    src/collision_detector.cpp
 )
 
 target_include_directories(game_server PRIVATE
@@ -34,3 +36,4 @@ target_link_libraries(game_server PRIVATE
 target_compile_definitions(game_server PRIVATE
     BOOST_LOG_USE_NATIVE_SYSLOG
 )
+
