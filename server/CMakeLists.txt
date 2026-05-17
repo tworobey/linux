@@ -13,27 +13,36 @@ conan_basic_setup(TARGETS)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-add_executable(game_server
-    src/main.cpp
-    src/http_server.cpp
+# Статическая библиотека с общим кодом (модель + генераторы)
+add_library(game_model STATIC
     src/model.cpp
     src/boost_json.cpp
-    src/json_loader.cpp
-    src/request_handler.cpp
     src/loot_generator.cpp
     src/collision_detector.cpp
 )
 
-target_include_directories(game_server PRIVATE
+target_include_directories(game_model PUBLIC
+    CONAN_PKG::boost
+    src
+)
+
+target_link_libraries(game_model PUBLIC
+    Threads::Threads
     CONAN_PKG::boost
 )
 
+# Основной исполняемый файл
+add_executable(game_server
+    src/main.cpp
+    src/http_server.cpp
+    src/json_loader.cpp
+    src/request_handler.cpp
+)
+
 target_link_libraries(game_server PRIVATE
-    Threads::Threads
-    CONAN_PKG::boost
+    game_model
 )
 
 target_compile_definitions(game_server PRIVATE
     BOOST_LOG_USE_NATIVE_SYSLOG
 )
-
