@@ -1,6 +1,9 @@
 build/
+logs/
 *.log
-exporter.log
-tank_errors.log
 ammo.txt
 load.yaml
+tank_errors.log
+exporter.log
+prometheus.yml
+web_exporter.py
