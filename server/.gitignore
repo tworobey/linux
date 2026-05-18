@@ -1,1 +1,6 @@
 build/
+*.log
+exporter.log
+tank_errors.log
+ammo.txt
+load.yaml
