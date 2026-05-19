@@ -12,6 +12,7 @@ WORKDIR /app
 COPY conanfile.txt .
 COPY CMakeLists.txt .
 COPY ./src ./src
+COPY ./tests ./tests
 
 RUN mkdir build && cd build && \
     conan install .. \

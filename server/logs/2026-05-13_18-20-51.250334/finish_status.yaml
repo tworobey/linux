@@ -1,0 +1,23 @@
+exit_code: 1
+left_time: null
+lunapark_id: null
+lunapark_url: null
+status_code: FINISHED
+tank_msg: "Exception occurred:\n<class 'FileNotFoundError'>: [Errno 2] No such file\
+  \ or directory: '/var/loadtest/ammo.txt'\n  File \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/core/tankworker.py\"\
+  , line 100, in run\n    self.core.plugins_configure()\n\n  File \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/core/tankcore.py\"\
+  , line 280, in plugins_configure\n    plugin.configure()\n\n  File \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/plugins/Phantom/plugin.py\"\
+  , line 67, in configure\n    self.phantom_config = self.phantom.config_file\n\n\
+  \  File \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/plugins/Phantom/utils.py\"\
+  , line 106, in config_file\n    self._config_file = self.compose_config()\n\n  File\
+  \ \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/plugins/Phantom/utils.py\"\
+  , line 114, in compose_config\n    streams_config += stream.compose_config()\n\n\
+  \  File \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/plugins/Phantom/utils.py\"\
+  , line 287, in compose_config\n    self.stepper_wrapper.prepare_stepper()\n\n  File\
+  \ \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/stepper/main.py\"\
+  , line 246, in prepare_stepper\n    self.stpd = self.__get_stpd_filename()\n\n \
+  \ File \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/stepper/main.py\"\
+  , line 297, in __get_stpd_filename\n    hashed_str += sep + opener.hash\n\n  File\
+  \ \"/home/tworobey/.pyenv/versions/3.10.4/lib/python3.10/site-packages/yandextank/contrib/netort/netort/resource.py\"\
+  , line 262, in hash\n    stat = os.stat(self.f_path)\n"
+test_id: 2026-05-13_18-20-51.250334
