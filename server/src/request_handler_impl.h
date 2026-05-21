@@ -102,14 +102,15 @@ json::object MakeError(std::string_view code, std::string_view message) {
 }
 
 std::optional<std::string> TryExtractToken(const http::fields& fields) {
+    constexpr size_t TOKEN_LENGTH = 32;
     auto it = fields.find(http::field::authorization);
     if (it == fields.end()) return std::nullopt;
     std::string val = std::string(it->value());
     const std::string prefix = "Bearer ";
-    if (val.size() < prefix.size() + 32 || val.substr(0, prefix.size()) != prefix)
+    if (val.size() < prefix.size() + TOKEN_LENGTH || val.substr(0, prefix.size()) != prefix)
         return std::nullopt;
     std::string token = val.substr(prefix.size());
-    if (token.size() != 32 ||
+    if (token.size() != TOKEN_LENGTH ||
         token.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
         return std::nullopt;
     return token;

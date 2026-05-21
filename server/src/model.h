@@ -352,6 +352,29 @@ public:
         return true;
     }
 
+    const std::vector<Player>& GetPlayers() const noexcept { return players_; }
+    int GetNextPlayerId() const noexcept { return next_player_id_; }
+    int GetNextLootId() const noexcept { return next_loot_id_; }
+    void SetNextPlayerId(int id) noexcept { next_player_id_ = id; }
+    void SetNextLootId(int id) noexcept { next_loot_id_ = id; }
+
+    const std::unordered_map<std::string, std::vector<LostObject>>& GetAllLostObjects() const noexcept {
+        return lost_objects_;
+    }
+
+    void RestorePlayer(int id, const std::string& name, const std::string& token,
+                       const std::string& map_id, Dog dog) {
+        const size_t index = players_.size();
+        players_.emplace_back(id, name, token, map_id);
+        auto dog_ptr = std::make_shared<Dog>(std::move(dog));
+        players_.back().SetDog(dog_ptr);
+        token_to_player_[token] = index;
+    }
+
+    void RestoreLostObjects(const std::string& map_id, const std::vector<LostObject>& objects) {
+        lost_objects_[map_id] = objects;
+    }
+
     std::vector<const Player*> GetPlayersOnMap(const std::string& mapId) const {
         std::vector<const Player*> result;
         for (const auto& p : players_)
@@ -362,12 +385,13 @@ public:
 
     // Обновляет состояние игры на dt миллисекунд
     void Tick(double dt_ms) {
-        double dt = dt_ms / 1000.0;
+        constexpr double MILLISECONDS_PER_SECOND = 1000.0;
+        double dt = dt_ms / MILLISECONDS_PER_SECOND;
 
         // Сохраняем позиции до движения
         std::unordered_map<int, DogPosition> prev_positions;
-        for (auto& player : players_) {
-            Dog* dog = player.GetDog();
+        for (const auto& player : players_) {
+            const Dog* dog = player.GetDog();
             if (dog) prev_positions[*dog->GetId()] = dog->GetPosition();
         }
 
@@ -451,71 +475,71 @@ private:
             auto& lost = lost_objects_[map_id];
 
             // Проверяем подбор предметов
-            std::vector<int> to_remove;
+            std::vector<int> indices_to_remove;
             for (int idx = 0; idx < static_cast<int>(lost.size()); ++idx) {
-                const auto& obj = lost[idx];
+                const auto& obj = lost.at(idx);
                 // Расстояние от точки до отрезка перемещения
-                double dx = cur_pos.x - prev_pos.x;
-                double dy = cur_pos.y - prev_pos.y;
-                double len2 = dx*dx + dy*dy;
+                double move_dx = cur_pos.x - prev_pos.x;
+                double move_dy = cur_pos.y - prev_pos.y;
+                double move_length_sq = move_dx*move_dx + move_dy*move_dy;
 
-                double dist2;
-                if (len2 < 1e-20) {
-                    double ex = obj.pos.x - prev_pos.x;
-                    double ey = obj.pos.y - prev_pos.y;
-                    dist2 = ex*ex + ey*ey;
+                double sq_dist_to_item;
+                if (move_length_sq < 1e-20) {
+                    double item_dx = obj.pos.x - prev_pos.x;
+                    double item_dy = obj.pos.y - prev_pos.y;
+                    sq_dist_to_item = item_dx*item_dx + item_dy*item_dy;
                 } else {
-                    double ux = obj.pos.x - prev_pos.x;
-                    double uy = obj.pos.y - prev_pos.y;
-                    double proj = (ux*dx + uy*dy) / len2;
+                    double item_dx = obj.pos.x - prev_pos.x;
+                    double item_dy = obj.pos.y - prev_pos.y;
+                    double proj = (item_dx*move_dx + item_dy*move_dy) / move_length_sq;
                     if (proj < 0.0) proj = 0.0;
                     if (proj > 1.0) proj = 1.0;
-                    double px = prev_pos.x + proj*dx - obj.pos.x;
-                    double py = prev_pos.y + proj*dy - obj.pos.y;
-                    dist2 = px*px + py*py;
+                    double perp_x = prev_pos.x + proj*move_dx - obj.pos.x;
+                    double perp_y = prev_pos.y + proj*move_dy - obj.pos.y;
+                    sq_dist_to_item = perp_x*perp_x + perp_y*perp_y;
                 }
 
                 const double collect_radius = 0.3; // 0.6/2
-                if (dist2 <= collect_radius * collect_radius) {
+                if (sq_dist_to_item <= collect_radius * collect_radius) {
                     Dog::BagItem item{obj.id, obj.type};
                     if (dog->AddToBag(item, bag_capacity)) {
-                        to_remove.push_back(idx);
+                        indices_to_remove.push_back(idx);
                     }
                 }
             }
 
             // Удаляем подобранные предметы (с конца чтобы не сбить индексы)
-            for (int i = static_cast<int>(to_remove.size()) - 1; i >= 0; --i) {
-                lost.erase(lost.begin() + to_remove[i]);
+            for (int i = static_cast<int>(indices_to_remove.size()) - 1; i >= 0; --i) {
+                lost.erase(lost.begin() + indices_to_remove.at(i));
             }
 
             // Проверяем возврат на базу
             const double base_radius = 0.55; // 0.5/2 + 0.6/2
             for (const auto& office : map->GetOffices()) {
-                double ox = office.GetPosition().x;
-                double oy = office.GetPosition().y;
+                double office_x = office.GetPosition().x;
+                double office_y = office.GetPosition().y;
 
-                double dx = cur_pos.x - prev_pos.x;
-                double dy = cur_pos.y - prev_pos.y;
-                double len2 = dx*dx + dy*dy;
+                double move_dx = cur_pos.x - prev_pos.x;
+                double move_dy = cur_pos.y - prev_pos.y;
+                double move_length_sq = move_dx*move_dx + move_dy*move_dy;
 
-                double dist2;
-                if (len2 < 1e-20) {
-                    double ex = ox - prev_pos.x;
-                    double ey = oy - prev_pos.y;
-                    dist2 = ex*ex + ey*ey;
+                double sq_dist_to_base;
+                if (move_length_sq < 1e-20) {
+                    double base_dx = office_x - prev_pos.x;
+                    double base_dy = office_y - prev_pos.y;
+                    sq_dist_to_base = base_dx*base_dx + base_dy*base_dy;
                 } else {
-                    double ux = ox - prev_pos.x;
-                    double uy = oy - prev_pos.y;
-                    double proj = (ux*dx + uy*dy) / len2;
+                    double base_dx = office_x - prev_pos.x;
+                    double base_dy = office_y - prev_pos.y;
+                    double proj = (base_dx*move_dx + base_dy*move_dy) / move_length_sq;
                     if (proj < 0.0) proj = 0.0;
                     if (proj > 1.0) proj = 1.0;
-                    double px = prev_pos.x + proj*dx - ox;
-                    double py = prev_pos.y + proj*dy - oy;
-                    dist2 = px*px + py*py;
+                    double perp_x = prev_pos.x + proj*move_dx - office_x;
+                    double perp_y = prev_pos.y + proj*move_dy - office_y;
+                    sq_dist_to_base = perp_x*perp_x + perp_y*perp_y;
                 }
 
-                if (dist2 <= base_radius * base_radius) {
+                if (sq_dist_to_base <= base_radius * base_radius) {
                     // Сдаём предметы
                     auto items = dog->EmptyBag();
                     const std::string mid = player.GetMapId();
