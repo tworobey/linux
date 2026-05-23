@@ -24,6 +24,7 @@ RUN mkdir build && cd build && \
 
 # ---------- RUN ----------
 FROM ubuntu:22.04 as run
+RUN apt update && apt install -y libpq5 && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r www && useradd -r -g www www
 

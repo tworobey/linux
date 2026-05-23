@@ -1,6 +1,7 @@
 #pragma once
 
 #include "request_handler.h"
+#include "db.h"
 #include <fstream>
 #include <algorithm>
 
@@ -119,11 +120,13 @@ std::optional<std::string> TryExtractToken(const http::fields& fields) {
 } // anonymous namespace
 
 inline RequestHandler::RequestHandler(model::Game& game, extra_data::MapExtraData& extra_data,
-                                       fs::path static_root, bool tick_auto_mode)
+                                       fs::path static_root, bool tick_auto_mode,
+                                       db::Database* database)
     : game_(game)
     , extra_data_(extra_data)
     , static_root_(fs::weakly_canonical(std::move(static_root)))
-    , tick_auto_mode_(tick_auto_mode) {}
+    , tick_auto_mode_(tick_auto_mode)
+    , db_(database) {}
 
 template <typename Body, typename Allocator, typename Send>
 void RequestHandler::operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
@@ -284,6 +287,61 @@ void RequestHandler::operator()(http::request<Body, http::basic_fields<Allocator
 
         return send(make_response(http::status::ok,
             json::serialize(json::object{{"players", players_obj}, {"lostObjects", lost_obj}})));
+    }
+
+    // RECORDS
+    if (target.rfind(std::string(endpoints::RECORDS), 0) == 0) {
+        if (req.method() != http::verb::get && req.method() != http::verb::head)
+            return send(make_response(http::status::method_not_allowed,
+                json::serialize(MakeError("invalidMethod", "Invalid method"))));
+
+        if (!db_)
+            return send(make_response(http::status::internal_server_error,
+                json::serialize(MakeError("serverError", "Database not available"))));
+
+        // Парсим параметры start и maxItems из URL
+        int start = 0;
+        int max_items = 100;
+
+        std::string query;
+        auto pos = target.find('?');
+        if (pos != std::string::npos)
+            query = target.substr(pos + 1);
+
+        auto parse_param = [&query](const std::string& name) -> std::optional<int> {
+            auto it = query.find(name + "=");
+            if (it == std::string::npos) return std::nullopt;
+            it += name.size() + 1;
+            auto end = query.find('&', it);
+            try {
+                return std::stoi(query.substr(it, end == std::string::npos ? end : end - it));
+            } catch (...) {
+                return std::nullopt;
+            }
+        };
+
+        if (auto s = parse_param("start")) start = *s;
+        if (auto m = parse_param("maxItems")) max_items = *m;
+
+        if (max_items > 100)
+            return send(make_response(http::status::bad_request,
+                json::serialize(MakeError("invalidArgument", "maxItems must not exceed 100"))));
+
+        try {
+            auto records = db_->GetRecords(start, max_items);
+            json::array arr;
+            for (const auto& r : records) {
+                json::object entry;
+                entry["name"]     = r.name;
+                entry["score"]    = r.score;
+                entry["playTime"] = r.play_time;
+                arr.push_back(entry);
+            }
+            return send(make_response(http::status::ok, json::serialize(arr)));
+        } catch (const std::exception& e) {
+            return send(make_response(http::status::internal_server_error,
+                json::serialize(MakeError("serverError", e.what()))));
+        }
     }
 
     // MAPS LIST

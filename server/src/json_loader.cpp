@@ -87,6 +87,9 @@ LoadResult LoadGame(const std::filesystem::path& json_path) {
     if (obj.contains("defaultBagCapacity"))
         game.SetDefaultBagCapacity(static_cast<int>(obj.at("defaultBagCapacity").as_int64()));
 
+    if (obj.contains("dogRetirementTime"))
+        game.SetDogRetirementTime(obj.at("dogRetirementTime").as_double());
+
     if (obj.contains("lootGeneratorConfig")) {
         const auto& lgc = obj.at("lootGeneratorConfig").as_object();
         double period = lgc.at("period").as_double();

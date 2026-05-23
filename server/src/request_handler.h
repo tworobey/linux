@@ -3,6 +3,7 @@
 #include "http_server.h"
 #include "model.h"
 #include "extra_data.h"
+#include "db.h"
 
 #include <boost/json.hpp>
 #include <filesystem>
@@ -26,12 +27,14 @@ namespace endpoints {
     constexpr std::string_view STATE      = "/api/v1/game/state";
     constexpr std::string_view ACTION     = "/api/v1/game/player/action";
     constexpr std::string_view TICK       = "/api/v1/game/tick";
+    constexpr std::string_view RECORDS    = "/api/v1/game/records";
 }
 
 class RequestHandler {
 public:
     RequestHandler(model::Game& game, extra_data::MapExtraData& extra_data,
-                   fs::path static_root, bool tick_auto_mode = false);
+                   fs::path static_root, bool tick_auto_mode = false,
+                   db::Database* database = nullptr);
 
     template <typename Body, typename Allocator, typename Send>
     void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send);
@@ -41,6 +44,7 @@ private:
     extra_data::MapExtraData& extra_data_;
     fs::path static_root_;
     bool tick_auto_mode_ = false;
+    db::Database* db_ = nullptr;
 };
 
 } // namespace http_handler

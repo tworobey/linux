@@ -42,6 +42,7 @@ add_executable(game_server
 
 target_link_libraries(game_server PRIVATE
     game_model
+    CONAN_PKG::libpqxx
 )
 
 target_compile_definitions(game_server PRIVATE
@@ -67,3 +68,4 @@ target_link_libraries(game_server_tests PRIVATE
     CONAN_PKG::catch2
     Threads::Threads
 )
+

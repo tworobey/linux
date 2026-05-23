@@ -210,9 +210,28 @@ public:
     DogSpeed GetSpeed() const noexcept { return speed_; }
     DogDirection GetDirection() const noexcept { return dir_; }
 
-    void SetSpeed(DogSpeed speed) noexcept { speed_ = speed; }
+    void SetSpeed(DogSpeed speed) noexcept {
+        speed_ = speed;
+        if (speed.vx == 0.0 && speed.vy == 0.0) {
+            if (!idle_since_) idle_since_ = 0.0;
+        } else {
+            idle_since_ = std::nullopt;
+        }
+    }
     void SetDirection(DogDirection dir) noexcept { dir_ = dir; }
     void SetPosition(DogPosition pos) noexcept { pos_ = pos; }
+
+    double GetIdleTime() const noexcept { return idle_since_ ? *idle_since_ : 0.0; }
+    double GetPlayTime() const noexcept { return play_time_; }
+
+    void UpdateIdleTime(double dt) {
+        play_time_ += dt;
+        if (idle_since_) *idle_since_ += dt;
+    }
+
+    bool IsIdle() const noexcept { return idle_since_.has_value(); }
+    void StartIdle() noexcept { if (!idle_since_) idle_since_ = 0.0; }
+    void StopIdle() noexcept { idle_since_ = std::nullopt; }
 
     // Рюкзак
     struct BagItem { int id; int type; };
@@ -240,6 +259,8 @@ private:
     DogDirection dir_ = DogDirection::NORTH;
     std::vector<BagItem> bag_;
     int score_ = 0;
+    std::optional<double> idle_since_;
+    double play_time_ = 0.0;
 };
 
 class Player {
@@ -292,6 +313,17 @@ public:
     bool GetRandomizeSpawn() const noexcept { return randomize_spawn_; }
     void SetDefaultBagCapacity(int cap) noexcept { default_bag_capacity_ = cap; }
     int GetDefaultBagCapacity() const noexcept { return default_bag_capacity_; }
+    void SetDogRetirementTime(double time) noexcept { dog_retirement_time_ = time; }
+    double GetDogRetirementTime() const noexcept { return dog_retirement_time_; }
+
+    struct RetiredDog {
+        std::string name;
+        int score = 0;
+        double play_time = 0.0;
+    };
+
+    using RetirementCallback = std::function<void(const RetiredDog&)>;
+    void SetRetirementCallback(RetirementCallback cb) { retirement_cb_ = std::move(cb); }
 
     void SetLootValues(const std::string& map_id, std::vector<int> values) {
         loot_values_[map_id] = std::move(values);
@@ -388,6 +420,12 @@ public:
         constexpr double MILLISECONDS_PER_SECOND = 1000.0;
         double dt = dt_ms / MILLISECONDS_PER_SECOND;
 
+        // Обновляем таймеры бездействия и общее время игры
+        for (auto& player : players_) {
+            Dog* dog = player.GetDog();
+            if (dog) dog->UpdateIdleTime(dt);
+        }
+
         // Сохраняем позиции до движения
         std::unordered_map<int, DogPosition> prev_positions;
         for (const auto& player : players_) {
@@ -432,6 +470,32 @@ public:
                 }
             }
         }
+
+        // Проверяем выход на пенсию
+        if (dog_retirement_time_ > 0.0) {
+            std::vector<size_t> to_retire;
+            for (size_t i = 0; i < players_.size(); ++i) {
+                const Dog* dog = players_.at(i).GetDog();
+                if (dog && dog->IsIdle() && dog->GetIdleTime() >= dog_retirement_time_) {
+                    to_retire.push_back(i);
+                }
+            }
+            // Удаляем с конца чтобы не сбить индексы
+            for (int i = static_cast<int>(to_retire.size()) - 1; i >= 0; --i) {
+                size_t idx = to_retire.at(i);
+                const auto& player = players_.at(idx);
+                const Dog* dog = player.GetDog();
+                if (dog && retirement_cb_) {
+                    retirement_cb_({player.GetName(), dog->GetScore(), dog->GetPlayTime()});
+                }
+                token_to_player_.erase(player.GetToken());
+                players_.erase(players_.begin() + idx);
+                // Пересчитываем индексы в token_to_player_
+                for (auto& [tok, player_idx] : token_to_player_) {
+                    if (player_idx > idx) --player_idx;
+                }
+            }
+        }
     }
 
 private:
@@ -447,10 +511,12 @@ private:
     int next_loot_id_ = 0;
     double default_dog_speed_ = 1.0;
     int default_bag_capacity_ = 3;
+    double dog_retirement_time_ = 60.0;
     bool randomize_spawn_ = false;
     std::optional<loot_gen::LootGenerator> loot_generator_;
     std::unordered_map<std::string, std::vector<LostObject>> lost_objects_;
     std::unordered_map<std::string, std::vector<int>> loot_values_;
+    RetirementCallback retirement_cb_;
 
     void ProcessCollisions(const std::unordered_map<int, DogPosition>& prev_positions) {
         for (auto& player : players_) {
@@ -631,6 +697,7 @@ private:
         // Если упёрся в границу — останавливаем
         if (std::abs(best_x - new_x) > 1e-9 || std::abs(best_y - new_y) > 1e-9) {
             dog.SetSpeed({0.0, 0.0});
+            dog.StartIdle();
         }
         dog.SetPosition({best_x, best_y});
     }
