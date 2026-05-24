@@ -1,0 +1,6 @@
+logs/
+exporter.log
+build/
+.idea/
+.vscode/
+cmake-build*/
