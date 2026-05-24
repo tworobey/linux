@@ -15,6 +15,9 @@
 #include "request_handler.h"
 #include "http_server.h"
 #include "ticker.h"
+#include "serialization.h"
+#include "db.h"
+#include "extra_data.h"
 
 using namespace std::literals;
 namespace net = boost::asio;
@@ -45,6 +48,8 @@ struct Args {
     std::string config_file;
     std::string www_root;
     bool randomize_spawn = false;
+    std::optional<std::string> state_file;
+    std::optional<int> save_state_period;
 };
 
 std::optional<Args> ParseArgs(int argc, const char* argv[]) {
@@ -54,7 +59,9 @@ std::optional<Args> ParseArgs(int argc, const char* argv[]) {
         ("tick-period,t", po::value<int>(), "set tick period (milliseconds)")
         ("config-file,c", po::value<std::string>(), "set config file path")
         ("www-root,w", po::value<std::string>(), "set static files root")
-        ("randomize-spawn-points", "spawn dogs at random positions");
+        ("randomize-spawn-points", "spawn dogs at random positions")
+        ("state-file", po::value<std::string>(), "set state file path")
+        ("save-state-period", po::value<int>(), "set state save period (milliseconds)");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -81,6 +88,12 @@ std::optional<Args> ParseArgs(int argc, const char* argv[]) {
         throw std::runtime_error("www-root is required");
 
     args.randomize_spawn = vm.count("randomize-spawn-points") > 0;
+
+    if (vm.count("state-file"))
+        args.state_file = vm["state-file"].as<std::string>();
+
+    if (vm.count("save-state-period"))
+        args.save_state_period = vm["save-state-period"].as<int>();
 
     return args;
 }
@@ -114,11 +127,50 @@ int main(int argc, const char* argv[]) {
 
         BOOST_LOG_TRIVIAL(info) << "server started";
 
-        model::Game game = json_loader::LoadGame(args->config_file);
+        auto result = json_loader::LoadGame(args->config_file);
+        model::Game& game = result.game;
+        extra_data::MapExtraData& extra_data = result.extra_data;
         game.SetRandomizeSpawn(args->randomize_spawn);
+
+        // Загружаем состояние если файл указан и существует
+        if (args->state_file) {
+            fs::path state_path(*args->state_file);
+            if (fs::exists(state_path)) {
+                try {
+                    serialization::LoadGameState(game, state_path);
+                    BOOST_LOG_TRIVIAL(info) << "Game state restored from " << *args->state_file;
+                } catch (const std::exception& e) {
+                    BOOST_LOG_TRIVIAL(error) << "Failed to restore game state: " << e.what();
+                    return EXIT_FAILURE;
+                }
+            }
+        }
 
         fs::path static_root = args->www_root;
         bool tick_auto_mode = args->tick_period.has_value();
+
+        // Инициализируем БД
+        std::unique_ptr<db::Database> database;
+        const char* db_url = std::getenv("GAME_DB_URL");
+        if (db_url) {
+            try {
+                database = std::make_unique<db::Database>(db_url);
+            } catch (const std::exception& e) {
+                BOOST_LOG_TRIVIAL(error) << "Failed to connect to database: " << e.what();
+                return EXIT_FAILURE;
+            }
+        }
+
+        // Устанавливаем callback для пенсии
+        if (database) {
+            game.SetRetirementCallback([&database](const model::Game::RetiredDog& dog) {
+                try {
+                    database->SaveRetiredPlayer({dog.name, dog.score, dog.play_time});
+                } catch (const std::exception& e) {
+                    // Логируем ошибку но не прерываем игру
+                }
+            });
+        }
 
         const unsigned threads = std::thread::hardware_concurrency();
         net::io_context ioc(threads);
@@ -129,7 +181,7 @@ int main(int argc, const char* argv[]) {
 
         auto api_strand = net::make_strand(ioc);
 
-        http_handler::RequestHandler handler{game, static_root, tick_auto_mode};
+        http_handler::RequestHandler handler{game, extra_data, static_root, tick_auto_mode, database.get()};
 
         auto logging_handler = [&](auto&& req, auto&& send) {
             auto start = std::chrono::steady_clock::now();
@@ -168,8 +220,19 @@ int main(int argc, const char* argv[]) {
             auto ticker = std::make_shared<Ticker>(
                 api_strand,
                 std::chrono::milliseconds(*args->tick_period),
-                [&game](std::chrono::milliseconds delta) {
+                [&game, &args](std::chrono::milliseconds delta) {
                     game.Tick(static_cast<double>(delta.count()));
+                    // Автосохранение по периоду
+                    if (args->state_file && args->save_state_period) {
+                        static std::chrono::milliseconds elapsed{0};
+                        elapsed += delta;
+                        if (elapsed.count() >= *args->save_state_period) {
+                            elapsed = std::chrono::milliseconds{0};
+                            try {
+                                serialization::SaveGameState(game, *args->state_file);
+                            } catch (...) {}
+                        }
+                    }
                 }
             );
             ticker->Start();
@@ -181,6 +244,16 @@ int main(int argc, const char* argv[]) {
         RunWorkers(std::max(1u, threads), [&ioc] {
             ioc.run();
         });
+
+        // Сохраняем состояние при завершении
+        if (args->state_file) {
+            try {
+                serialization::SaveGameState(game, *args->state_file);
+                BOOST_LOG_TRIVIAL(info) << "Game state saved to " << *args->state_file;
+            } catch (const std::exception& e) {
+                BOOST_LOG_TRIVIAL(error) << "Failed to save game state: " << e.what();
+            }
+        }
     } catch (const std::exception& ex) {
         std::cerr << ex.what() << std::endl;
         return EXIT_FAILURE;
