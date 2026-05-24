@@ -1,0 +1,5 @@
+build/
+logs/
+*.log
+.cache/
+__pycache__/
